@@ -11,7 +11,7 @@
 - **EC2 (Elastic Compute Cloud)**: AWS's service for renting a **virtual computer** (a "virtual machine") that runs your software.
 - **Instance**: one rented virtual computer. "An EC2 instance" = one rented machine.
 - **Public IP**: the internet-facing address of that machine, so people can reach it.
-- **Region / Availability Zone**: *where* the physical data center is (e.g., "US-East"). Distance affects speed.
+- **Region vs Availability Zone**: a **Region** is a geographic area (e.g., `us-east-1`); distance from your users affects speed. Each Region *contains multiple* **Availability Zones (AZs)** — each AZ is one or more discrete data centers with independent power and networking. You spread a system across AZs so that one data center failing doesn't take you down (high availability).
 
 ---
 
@@ -23,6 +23,7 @@
 | EC2 instance | An apartment you rent |
 | Public IP | Your apartment's street address |
 | Region | The city the building is in |
+| Availability Zone | A separate building in that city (if one loses power, others stay up) |
 | You (SSH/login) | The tenant with a key |
 
 You don't own the building; you rent an apartment, get an address, and run your stuff there. If you need a bigger one, you "upgrade" (more CPU/RAM).

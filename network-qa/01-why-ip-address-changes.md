@@ -147,9 +147,11 @@ biggest infrastructure on the internet:
   *identity layer* are stable.
 
 - **Load balancers & the `X-Forwarded-For` header.** Behind an AWS ALB, Cloudflare,
-  or Nginx, your backend sees the *proxy's* IP as the source, not the real client
-  — the proxy is doing NAT-like source rewriting. The real client IP is preserved
-  in the `X-Forwarded-For` header. Beginners log the wrong IP for months because
+  or Nginx, your backend sees the *proxy's* IP as the source, not the real client.
+  This is **not NAT** (which rewrites L3/L4 headers on the same packet flow): a
+  reverse proxy *terminates* the client's TCP connection and opens a brand-new
+  connection to the backend, so the backend's peer address is legitimately the
+  proxy. The real client IP is preserved in the `X-Forwarded-For` header. Beginners log the wrong IP for months because
   they read the socket's peer address instead of that header.
 
 - **Sticky sessions vs stateless tokens.** Because a user's IP (and which server

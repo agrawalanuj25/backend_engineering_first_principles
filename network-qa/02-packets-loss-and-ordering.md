@@ -14,9 +14,10 @@ bug; the internet was *designed* assuming this happens. The network layer (IP)
 makes **zero delivery guarantees** — it only does "best effort." Reliability is a
 **choice made by the software on top**:
 
-- **TCP** = "deliver everything, in order, no matter what." It numbers packets,
-  reorders them at the receiver, and **retransmits** anything lost. Used for web
-  pages, downloads, email, APIs — anywhere *correctness > speed*.
+- **TCP** = "deliver everything, in order, no matter what." It numbers **bytes**
+  (every byte in the stream has a sequence number, not each packet), reorders
+  them at the receiver, and **retransmits** anything lost. Used for web pages,
+  downloads, email, APIs — anywhere *correctness > speed*.
 - **UDP** = "fire and forget, keep it fast." No reordering, no retransmission. If
   a packet is lost, skip it and move on. Used for video calls, live streaming,
   games — anywhere *speed > perfection*.
@@ -33,7 +34,9 @@ makes **zero delivery guarantees** — it only does "best effort." Reliability i
 
 Imagine sending a 1 GB file as one giant blob. If the link hiccups at 999 MB, you
 restart from zero. And while your blob hogs the wire, nobody else can send
-anything. Splitting into small **packets** (~1,500 bytes each) fixes both:
+anything. Splitting into small **packets** (~1,500 bytes each on Ethernet — that's the MTU
+for the whole IP packet; the usable TCP payload, the MSS, is ~1,460 bytes after
+IP+TCP headers) fixes both:
 
 - **Resilience:** lose one packet → resend *just that packet*, not the whole file.
 - **Independent routing:** packets can take different paths around congestion or a
@@ -60,8 +63,8 @@ So *something* has to clean this up — or decide it doesn't care.
 
 ### Step 3: TCP — the "I want everything, correctly" contract
 
-TCP tags every chunk with a **sequence number** so the receiver can reassemble
-the original order and detect gaps.
+TCP tags the data with **sequence numbers** (counting bytes, not packets) so the
+receiver can reassemble the original order and detect gaps.
 
 ```mermaid
 flowchart TB
@@ -93,6 +96,13 @@ sequenceDiagram
     R-->>S: ACK — "complete ✓, delivered in order to the app"
 ```
 
+> **Precision note:** the "got 1,2,4, missing 3" acknowledgement shown above is
+> **Selective ACK (SACK)**, an optional TCP extension (RFC 2018) that most modern
+> stacks negotiate. *Base* TCP ACKs are **cumulative**: the receiver only ACKs the
+> highest in-order byte (here, the data up to #2) and sends *duplicate ACKs* for
+> the later out-of-order arrivals, which triggers the sender's **fast retransmit**
+> of #3. Same outcome, different mechanism — worth knowing for an interview.
+
 The application (browser, file downloader) only ever sees the clean, ordered,
 complete stream. All the mess above is hidden. **That's why a download is byte-
 perfect even over a flaky connection.**
@@ -120,13 +130,22 @@ flowchart LR
 | Web page / API call | TCP | Retransmit — page must be correct |
 | File / app download | TCP | Retransmit until byte-perfect |
 | Email | TCP | Every byte must arrive |
-| Video / voice call | UDP | Skip it — stay real-time |
-| Live sports stream | UDP-based | Drop frames over stalling |
+| Video / voice call (WebRTC) | UDP | Skip it — stay real-time |
+| Live sports stream (HLS/DASH OTT) | **TCP** | Buffer a few seconds, drop *quality* — see note below |
+| Ultra-low-latency live (WebRTC) | UDP | Drop frames over stalling |
 | Online game (position updates) | UDP | Skip — the *next* update is what matters |
 
+> **Myth-buster on "live sports = UDP":** the *dominant* way you watch live sports
+> today (ESPN+, YouTube TV, most OTT streaming) is **HLS/DASH over TCP/HTTP** with
+> a several-second buffer — the same adaptive-bitrate (ABR) mechanism as on-demand
+> video. On loss/congestion it drops to a *lower quality* rather than stalling; it
+> does not "drop frames." Only genuinely interactive, sub-second paths (WebRTC
+> video calls, cloud gaming) or legacy IPTV multicast use UDP. Don't parrot "live
+> = UDP" in an interview.
+
 > **The deciding question:** *"Is a slightly late-but-perfect delivery useful, or
-> is stale data worthless?"* If stale data is worthless (live media, games), pay
-> nothing for reliability — use UDP.
+> is stale data worthless?"* If stale data is worthless (real-time interactive
+> media, games), pay nothing for reliability — use UDP.
 
 ---
 

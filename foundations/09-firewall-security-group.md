@@ -7,7 +7,7 @@
 ## Plain definition
 
 - **Firewall**: a filter that decides **which network traffic is allowed in or out** of a computer/network. It works mostly by **port** (file 02).
-- **Security group**: AWS's name for a firewall attached to your EC2 instance. By default it **blocks everything**; you explicitly *allow* only the ports you need.
+- **Security group**: AWS's name for a firewall attached to your EC2 instance. A newly created one **blocks all *inbound* traffic but allows all *outbound***; you explicitly *allow* only the inbound ports you need. Two precise facts worth knowing: (1) it is **stateful** — if you allow an inbound connection, the return traffic is automatically permitted, so you don't open ephemeral outbound ports for replies (unlike a stateless NACL); (2) rules are *allow-only* — you can't write an explicit "deny" rule.
 
 Think of a firewall as a **bouncer at a club door** checking IDs and only letting in people on the guest list (allowed ports).
 

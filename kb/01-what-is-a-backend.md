@@ -95,18 +95,20 @@ flowchart TD
 | **Packet** | The unit of data that actually travels; a message is split into many. |
 | **Hop** | One step a packet takes between machines/routers on its path. |
 | **Port** | A numbered "door" on a machine; a server listens on a specific port. |
-| **Socket** | An open connection endpoint identified by IP + port; the OS abstraction for "talking." |
+| **Socket** | The OS abstraction for "talking." A *listening* socket is identified by IP + port; an *established* connection is uniquely identified by the full 4-tuple (src IP, src port, dst IP, dst port) — which is why one server IP:port serves thousands of simultaneous connections. |
 | **Firewall** | A filter deciding which traffic may enter/leave. |
 | **Load balancer / reverse proxy** | A front door that spreads requests across many servers and hides them. |
 | **Latency** | Time for one request to make the round trip (ms). |
-| **Bandwidth / throughput** | How much data can move per unit time. |
+| **Bandwidth vs throughput** | *Bandwidth* = the link's maximum capacity; *throughput* = the rate actually achieved (always ≤ bandwidth, reduced by protocol overhead, congestion, and loss). |
 | **State** | Data the system remembers between requests (DB, cache, session). |
 | **Runtime** | The engine executing server code (event loop, thread scheduler, GC). |
 | **Framework** | A toolkit that *calls your code* and hides much of the machinery below. |
 
 Key insight: the request does **not** go "straight" to your handler. It passes
-through DNS → TCP → TLS → load balancer → firewall → web server → framework →
-your code. Each layer can fail, reject, or alter it.
+through DNS → TCP → TLS → firewall → load balancer → web server → framework →
+your code. Each layer can fail, reject, or alter it. (Exact ordering is
+environment-dependent — an edge firewall usually sits ahead of the load
+balancer at the network perimeter.)
 
 ## 5. How It Fits the Request Lifecycle
 
@@ -169,16 +171,22 @@ in, you already have the senior-level mental model.
 
 ## 8. Advanced / Senior-Level Pitfalls & Trade-offs
 
-- **The fallacies of distributed computing, lived.** The 8 fallacies (network
-  reliable, latency zero, topology static, admin one, transport secure,
-  topology homogeneous, infinite bandwidth, no leader change) are not trivia —
-  each is a real production incident waiting. Seniors design *assuming* they're
-  false.
-- **Head-of-line blocking & protocol choices.** HTTP/1.1 opens a handful of
-  connections; one slow response can block others on the same connection.
-  HTTP/2 multiplexes; HTTP/3 (QUIC) moves congestion control to UDP to survive
-  connection migration (e.g., Wi-Fi → cellular). The "right" choice is a
-  trade-off, not a default.
+- **The fallacies of distributed computing, lived.** The canonical 8 fallacies
+  (Deutsch/Gosling) are: the network is reliable; latency is zero; bandwidth is
+  infinite; the network is secure; topology doesn't change; there is one
+  administrator; **transport cost is zero**; the network is homogeneous. They
+  are not trivia — each is a real production incident waiting. Seniors design
+  *assuming* they're false.
+- **Head-of-line blocking & protocol choices.** HTTP/1.1 serializes responses on
+  a connection, so one slow response blocks the ones behind it (browsers work
+  around this by opening ~6 connections per host). HTTP/2 multiplexes many
+  streams over **one TCP connection** — but a single lost packet still stalls
+  *all* streams, because TCP delivers bytes in order (transport-level HOL
+  blocking). HTTP/3 runs over **QUIC** (on UDP), which implements its own
+  reliability and congestion control in user space with **independent streams**,
+  so loss on one stream doesn't block the others; QUIC also survives connection
+  migration (e.g., Wi-Fi → cellular) via connection IDs rather than the IP/port
+  4-tuple. The "right" choice is a trade-off, not a default.
 - **Load balancer traps:** sticky sessions hide state bugs; health-check
   misconfiguration causes thundering herds on deploy; connection draining vs
   graceful shutdown mismatches drop in-flight requests.

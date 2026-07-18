@@ -38,7 +38,7 @@ sequenceDiagram
 
 1. Browser asks for a secure connection.
 2. Server shows its **certificate** (proof).
-3. Browser verifies it (via a trusted authority).
+3. Browser verifies it **locally** — it checks the certificate's signature chain against the CA root certificates already installed in your OS/browser trust store. (No live call to the CA at handshake time; revocation checks via OCSP/CRL are a separate, optional step.)
 4. They exchange data **encrypted**.
 
 ---

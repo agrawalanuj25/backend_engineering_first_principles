@@ -161,14 +161,14 @@ Here's a realistic **request** your browser sends for that Wikipedia page, and t
 
 **Request (what your browser sends):**
 ```
-GET /wiki/HTTP HTTPS/1.1
+GET /wiki/HTTP HTTP/1.1
 Host: en.wikipedia.org
 User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126 Safari/537.36
 Accept: text/html,application/xhtml+xml
 Accept-Language: en-US,en;q=0.9
 Connection: keep-alive
 ```
-- `GET` = fetch (foundations/06). `/wiki/HTTP` = the path. `HTTPS/1.1` = protocol version.
+- `GET` = fetch (foundations/06). `/wiki/HTTP` = the path. `HTTP/1.1` = protocol version. (Note: the version token is always `HTTP/…`, never `HTTPS/…` — "HTTPS" is the URL *scheme*, meaning HTTP carried over a TLS-encrypted connection, not a protocol-version string.)
 - `Host` = which site (a server can host many domains).
 - `User-Agent` = "who is asking" (your browser/OS).
 - `Accept-Language` = "I prefer English."

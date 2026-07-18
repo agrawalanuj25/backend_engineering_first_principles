@@ -50,7 +50,7 @@ flowchart LR
     end
     NET((Internet)) --> P80
     NET --> P443
-    NET --> P3001
+    NET -. blocked (internal only) .-> P3001
     NET -. blocked unless open .-> P22
 ```
 

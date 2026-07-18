@@ -9,7 +9,7 @@
 - **Browser runtime**: the browser is the *environment* that runs your frontend JavaScript (just like Node is the runtime for backend JS — file 04/05).
 - **Sandbox**: the browser runs JS in an **isolated, restricted box**. The JS *cannot* freely access your filesystem, other programs, or OS — only what the browser explicitly allows (the page DOM, some storage, certain APIs).
 - **DOM (Document Object Model)**: the browser's live representation of the page; JS can read/change what's on screen via the DOM.
-- **CORS (Cross-Origin Resource Sharing)**: a browser **security policy** that blocks a page's JS from calling APIs on a *different domain* unless that API permits it.
+- **CORS (Cross-Origin Resource Sharing)**: a browser **security policy** that blocks a page's JS from *reading responses* from a different **origin** (scheme + host + port, not just domain) unless that server permits it via `Access-Control-Allow-*` headers. Precise point: for "simple" requests the browser still *sends* the request and the server still *processes* it — CORS blocks your JavaScript from *reading the response*, it does not stop the request. (The sequence diagram below shows exactly this.)
 - **Hydration**: when a page's downloaded JavaScript "wires up" interactivity — attaching click handlers so buttons actually work.
 
 ---

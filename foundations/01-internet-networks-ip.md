@@ -8,7 +8,7 @@
 
 - A **network** is two or more computers connected so they can share data (your home Wi-Fi is a small network).
 - The **internet** is the *giant global network* that connects millions of smaller networks together.
-- Every device on a network has a unique address called an **IP address** (like `142.250.72.14`), so messages know where to go.
+- Every device on a network has an address called an **IP address** (like `142.250.72.14`), so messages know where to go. It's unique *within its routing scope*, not globally: **public** IPs are globally unique, but **private** ranges (like `192.168.x.x` or `10.x.x.x`) are reused across millions of home/office networks and hidden behind NAT — more on this in `network-qa/01-why-ip-address-changes.md`.
 
 ---
 

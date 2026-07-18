@@ -1,0 +1,414 @@
+<title>Request Lifecycle Explorer</title>
+<style>
+  :root {
+    /* chosen neutrals: cool, slight indigo bias — not default grey */
+    --bg: #f5f7fa;
+    --surface: #ffffff;
+    --surface-2: #eef1f6;
+    --ink: #10151f;
+    --ink-soft: #3f4a5c;
+    --ink-faint: #6b7688;
+    --line: #d9dfe9;
+    /* signal accent = the packet travelling the wire */
+    --signal: #1f6feb;
+    --signal-soft: #dbe7ff;
+    /* semantic (separate from accent) */
+    --ok: #1a8f5a;
+    --warn: #b7791f;
+    --danger: #d64545;
+    --danger-soft: #fbe3e3;
+    --latency: #8a5cf6;
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --maxw: 1080px;
+    --r: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1220;
+      --surface: #121b2c;
+      --surface-2: #0e1626;
+      --ink: #eef2f8;
+      --ink-soft: #b7c1d4;
+      --ink-faint: #7d8aa1;
+      --line: #22304a;
+      --signal: #5b9bff;
+      --signal-soft: #16294a;
+      --ok: #46c98a;
+      --warn: #e0a94a;
+      --danger: #f0796f;
+      --danger-soft: #3a1e21;
+      --latency: #a986f7;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f7fa; --surface: #ffffff; --surface-2: #eef1f6;
+    --ink: #10151f; --ink-soft: #3f4a5c; --ink-faint: #6b7688; --line: #d9dfe9;
+    --signal: #1f6feb; --signal-soft: #dbe7ff;
+    --ok: #1a8f5a; --warn: #b7791f; --danger: #d64545; --danger-soft: #fbe3e3; --latency: #8a5cf6;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b1220; --surface: #121b2c; --surface-2: #0e1626;
+    --ink: #eef2f8; --ink-soft: #b7c1d4; --ink-faint: #7d8aa1; --line: #22304a;
+    --signal: #5b9bff; --signal-soft: #16294a;
+    --ok: #46c98a; --warn: #e0a94a; --danger: #f0796f; --danger-soft: #3a1e21; --latency: #a986f7;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: clamp(20px, 4vw, 48px) clamp(16px, 4vw, 32px) 80px; }
+
+  /* ---- header ---- */
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--signal); margin: 0 0 10px;
+  }
+  h1 { font-size: clamp(28px, 5vw, 46px); line-height: 1.05; margin: 0 0 12px; text-wrap: balance; letter-spacing: -.02em; }
+  .lede { font-size: clamp(15px, 2vw, 18px); color: var(--ink-soft); max-width: 62ch; margin: 0 0 26px; }
+
+  /* ---- address bar ---- */
+  .urlbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+    padding: 10px 14px; font-family: var(--mono); font-size: 14px; margin-bottom: 20px;
+  }
+  .urlbar .lock { color: var(--ok); font-weight: 700; }
+  .urlbar .u { color: var(--ink); overflow-x: auto; white-space: nowrap; }
+  .urlbar .u b { color: var(--signal); font-weight: 700; }
+
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 30px; }
+  button {
+    font-family: var(--sans); font-size: 14px; font-weight: 600;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    padding: 9px 16px; border-radius: 999px; cursor: pointer; transition: background .15s, border-color .15s, transform .05s;
+  }
+  button:hover { border-color: var(--signal); }
+  button:active { transform: translateY(1px); }
+  button.primary { background: var(--signal); border-color: var(--signal); color: #fff; }
+  button.primary:hover { filter: brightness(1.06); }
+  button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
+  .hint { font-size: 13px; color: var(--ink-faint); }
+
+  /* ---- pipeline ---- */
+  .track-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .track-label span { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); }
+  .pipeline {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(96px, 1fr);
+    gap: 8px; overflow-x: auto; padding: 4px 2px 14px; scroll-snap-type: x proximity;
+  }
+  .hop {
+    scroll-snap-align: center;
+    position: relative; text-align: center; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+    padding: 14px 8px 12px; transition: border-color .15s, background .15s, transform .12s;
+    display: flex; flex-direction: column; align-items: center; gap: 7px; min-height: 118px;
+  }
+  .hop:hover { transform: translateY(-3px); border-color: var(--signal); }
+  .hop:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
+  .hop.active { border-color: var(--signal); background: var(--signal-soft); box-shadow: 0 6px 22px -12px var(--signal); }
+  .hop.lit { border-color: var(--signal); }
+  .hop .glyph {
+    width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+    background: var(--surface-2); color: var(--signal); flex: none;
+  }
+  .hop.active .glyph { background: var(--signal); color: #fff; }
+  .hop .glyph svg { width: 22px; height: 22px; }
+  .hop .name { font-size: 12.5px; font-weight: 650; line-height: 1.15; }
+  .hop .lat { font-family: var(--mono); font-size: 10.5px; color: var(--latency); font-variant-numeric: tabular-nums; }
+  .hop .num {
+    position: absolute; top: 6px; left: 8px; font-family: var(--mono);
+    font-size: 10px; color: var(--ink-faint);
+  }
+  /* travelling packet dot */
+  .hop .pkt {
+    position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%) scale(0);
+    width: 12px; height: 12px; border-radius: 50%; background: var(--signal);
+    box-shadow: 0 0 0 4px var(--signal-soft); transition: transform .25s;
+  }
+  .hop.lit .pkt { transform: translateX(-50%) scale(1); }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 6px 0 30px; font-size: 12px; color: var(--ink-faint); }
+  .legend b { color: var(--latency); font-family: var(--mono); font-weight: 600; }
+
+  /* ---- detail panel ---- */
+  .detail {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: clamp(18px, 3vw, 28px); min-height: 220px;
+  }
+  .detail .d-head { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; flex-wrap: wrap; }
+  .detail .d-glyph { width: 44px; height: 44px; border-radius: 11px; background: var(--signal-soft); color: var(--signal); display: grid; place-items: center; flex: none; }
+  .detail .d-glyph svg { width: 24px; height: 24px; }
+  .detail h2 { font-size: clamp(19px, 3vw, 24px); margin: 0; letter-spacing: -.01em; }
+  .detail .d-sub { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
+    font-size: 11.5px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2);
+    color: var(--ink-soft); border: 1px solid var(--line);
+  }
+  .chip.lat { color: var(--latency); }
+  .d-body { margin-top: 18px; display: grid; gap: 18px; grid-template-columns: 1fr; }
+  @media (min-width: 720px) { .d-body { grid-template-columns: 1.1fr 1fr; } }
+  .d-what p { margin: 0 0 12px; color: var(--ink-soft); }
+  .d-what p:first-child { color: var(--ink); font-size: 15.5px; }
+  .card { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface-2); }
+  .card h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; font-family: var(--mono); }
+  .card.curtain h3 { color: var(--signal); }
+  .card.fail h3 { color: var(--danger); }
+  .card ul { margin: 0; padding-left: 18px; }
+  .card li { margin: 0 0 7px; font-size: 13.5px; color: var(--ink-soft); }
+  .card li b { color: var(--ink); }
+  .card.fail { background: var(--danger-soft); border-color: transparent; }
+  .kbref { margin-top: 16px; font-size: 13px; color: var(--ink-faint); }
+  .kbref code { font-family: var(--mono); background: var(--surface-2); padding: 2px 6px; border-radius: 5px; color: var(--ink-soft); }
+
+  /* ---- latency reference ---- */
+  .section-title { font-size: 13px; font-family: var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); margin: 44px 0 14px; }
+  .lat-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .lat-table th, .lat-table td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  .lat-table th { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; }
+  .lat-table td.num { font-family: var(--mono); text-align: right; color: var(--latency); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .lat-table .bar { height: 7px; border-radius: 4px; background: var(--latency); min-width: 2px; }
+  .lat-table td.barcell { width: 40%; }
+  .caption { font-size: 12.5px; color: var(--ink-faint); margin-top: 10px; }
+
+  footer { margin-top: 46px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-faint); }
+  footer b { color: var(--ink-soft); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Backend from First Principles · interactive</p>
+  <h1>What actually happens when you open a URL?</h1>
+  <p class="lede">A request is not magic — it is a packet that physically hops across many machines. Press <b>Play</b> to watch one travel, or click any hop to see what happens there, <b>what your framework hides</b>, how it fails, and what it costs in real latency.</p>
+
+  <div class="urlbar" role="img" aria-label="Browser address bar showing a secure request">
+    <span class="lock" aria-hidden="true">🔒</span>
+    <span class="u">GET https://<b>api.demo.xyz</b>/users&nbsp;&nbsp;·&nbsp;&nbsp;HTTP/1.1</span>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="play" aria-label="Play the request animation">▶ Play the request</button>
+    <button id="step">Step ›</button>
+    <button id="reset">Reset</button>
+    <span class="hint" id="hint">Tip: click a hop, or use ← → keys.</span>
+  </div>
+
+  <div class="track-label"><span>Request path →</span><span>← Response path</span></div>
+  <div class="pipeline" id="pipeline" role="tablist" aria-label="Request lifecycle hops"></div>
+  <div class="legend"><span><b>■</b> purple = typical latency contribution of this hop</span></div>
+
+  <div class="detail" id="detail" aria-live="polite"></div>
+
+  <p class="section-title">Latency numbers every engineer should know</p>
+  <table class="lat-table" id="latTable">
+    <thead><tr><th>Operation</th><th>Approx. time</th><th class="barcell">Relative (log scale)</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <p class="caption">The whole point: memory is nanoseconds, disk is microseconds, and the <b>network is milliseconds</b> — a million times slower than a cache hit. HFT and low-latency engineering is the art of staying on the fast end of this table. Values are order-of-magnitude (Jeff Dean / Peter Norvig, updated).</p>
+
+  <footer>
+    Built as a study aid for <b>backend_engineering_first_principles</b>. The mental model here is the spine of <b>kb/01-what-is-a-backend.md</b> — if you can redraw this path from memory and name each hop's failure mode, you have the senior-level picture.
+  </footer>
+</div>
+
+<script>
+  // ---- icons (inline SVG, currentColor) ----
+  const I = {
+    browser: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>',
+    dns: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>',
+    tcp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 7l4-3M4 7l4 3"/><path d="M20 17H4M20 17l-4-3M20 17l-4 3"/></svg>',
+    tls: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+    fw: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v14H4z"/><path d="M4 9h16M4 14h16M9 5v4M14 9v5M9 14v5"/></svg>',
+    lb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M12 11H5v6M12 11v6M12 11h7v6"/></svg>',
+    nginx: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M9 16V9l6 6V9"/></svg>',
+    app: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M13 6l-2 12"/></svg>',
+    db: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>'
+  };
+
+  // ---- the hops (technically accurate summaries) ----
+  const HOPS = [
+    { id:'browser', icon:'browser', name:'Browser', sub:'the client', latLabel:'~0 ms', bar:2,
+      what:['Your browser parses the URL, checks its own caches (DNS, HTTP, connection reuse), and builds the HTTP request line + headers.','It runs sandboxed: it can’t open a raw socket to your database or read your filesystem — which is *why* a backend has to exist.'],
+      curtain:['That <b>req.headers</b> object started life as raw text the browser serialized here.','SPA frameworks hide that the first paint may be server-rendered HTML, then “hydrated”.'],
+      fail:['<b>Typo / bad scheme</b> → request never leaves.','Stale cache serving old data (cache invalidation is hard).'],
+      kb:'foundations/13-browser-sandbox-cors.md' },
+
+    { id:'dns', icon:'dns', name:'DNS lookup', sub:'name → IP', latLabel:'0–120 ms', bar:22,
+      what:['<b>api.demo.xyz</b> means nothing to the network — it must become an IP like <b>12.34.56.78</b> via an <b>A record</b>.','The resolver walks a cache hierarchy (browser → OS → recursive resolver → root → TLD → authoritative). A warm cache = ~0 ms; a cold lookup can be 100 ms+.'],
+      curtain:['Frameworks never show this — by the time your code runs, the hostname is long resolved.','An IP can change under a stable name; that indirection is the whole point of DNS.'],
+      fail:['<b>NXDOMAIN</b> (name doesn’t exist) or a slow/broken resolver stalls every request.','Low TTLs hammer resolvers; high TTLs slow failover during an outage.'],
+      kb:'foundations/07-dns-domains.md' },
+
+    { id:'tcp', icon:'tcp', name:'TCP handshake', sub:'SYN · SYN-ACK · ACK', latLabel:'1 RTT', bar:28,
+      what:['Before any data, client and server agree to talk: a <b>3-way handshake</b> costing one full round trip.','TCP then guarantees an ordered, reliable <b>byte stream</b> — it numbers bytes, re-orders, and retransmits loss.'],
+      curtain:['You call an HTTP client method; the socket, handshake, and connection pool are invisible.','Keep-alive reuses a warm connection so later requests skip this RTT — a real speedup.'],
+      fail:['<b>SYN dropped</b> by a firewall → the client hangs until timeout (no polite refusal).','Connection refused (nothing listening on the port) → instant reset.'],
+      kb:'network-qa/02-packets-loss-and-ordering.md' },
+
+    { id:'tls', icon:'tls', name:'TLS handshake', sub:'the “S” in HTTPS', latLabel:'1 RTT', bar:26,
+      what:['The server presents its <b>certificate</b>; the browser verifies the signature chain <b>locally</b> against trusted CA roots (no live call to the CA).','Both sides derive session keys. TLS 1.3 needs ~1 RTT (0-RTT on resume). All later bytes are encrypted.'],
+      curtain:['“It’s HTTPS” only guarantees the *public* hop. TLS often terminates at the load balancer — traffic behind it may be plaintext.'],
+      fail:['Expired / mismatched / self-signed cert → the browser refuses to connect.','Protocol/cipher mismatch between old clients and hardened servers.'],
+      kb:'foundations/11-https-ssl-tls.md' },
+
+    { id:'fw', icon:'fw', name:'Firewall', sub:'security group', latLabel:'~0 ms', bar:3,
+      what:['At the server’s edge, a firewall (AWS <b>security group</b>) decides if this port is allowed. Typically 443 is open; everything else is dropped.','Security groups are <b>stateful</b>: allow an inbound connection and its return traffic is automatically permitted. Rules are allow-only.'],
+      curtain:['Invisible to app code — but it’s why your app on <b>:3001</b> is unreachable from the internet even though it’s “running”.'],
+      fail:['Port not opened → request silently times out (drop, not reject) — a classic “works locally, dead in prod”.'],
+      kb:'foundations/09-firewall-security-group.md' },
+
+    { id:'lb', icon:'lb', name:'Load balancer', sub:'spread + hide', latLabel:'<1 ms', bar:5,
+      what:['One public front door spreads requests across many identical backend instances, and hides them from the internet.','It health-checks backends and stops sending traffic to sick ones. Often it also terminates TLS.'],
+      curtain:['“The server” is usually *many* processes. In-memory state on one node isn’t shared — sessions/caches must live in Redis/DB, not a local variable.'],
+      fail:['No healthy backends → <b>503</b>. Sticky sessions mask state bugs; bad health checks cause thundering herds on deploy.'],
+      kb:'kb/01-what-is-a-backend.md' },
+
+    { id:'nginx', icon:'nginx', name:'Reverse proxy', sub:'nginx', latLabel:'<1 ms', bar:4,
+      what:['Nginx receives the request and <b>proxy_pass</b>es it to your app on <b>localhost:3001</b>, adding headers like <b>X-Forwarded-For</b> (the real client IP).','It can serve static files, rate-limit, compress, and add security headers — offloading the app.'],
+      curtain:['Your app sees the proxy’s IP as the peer unless it reads <b>X-Forwarded-For</b>. A reverse proxy is *not* NAT — it terminates one connection and opens a new one.'],
+      fail:['App down / not listening → nginx returns <b>502 Bad Gateway</b>. Timeouts → <b>504</b>.'],
+      kb:'foundations/10-reverse-proxy-nginx.md' },
+
+    { id:'app', icon:'app', name:'App server', sub:'framework + handler', latLabel:'varies', bar:16,
+      what:['Finally your code. The framework parses the HTTP message into a request object, runs the <b>middleware chain</b> (auth, logging, body-parsing), matches a <b>route</b>, and calls your <b>handler</b>.','It runs business logic, then <b>serializes</b> the result back to JSON bytes for the wire.'],
+      curtain:['<b>req.user</b> came from a token middleware verified. <b>req.body</b> is already-parsed bytes. Middleware *order* decides whether auth runs before or after logging. The concurrency model (event loop vs threads) dictates how you fail under load.'],
+      fail:['Unhandled exception → <b>500</b>. Blocking the event loop with CPU work stalls *all* requests. No timeout on a downstream → socket exhaustion.'],
+      kb:'foundations/05-nodejs-and-servers.md' },
+
+    { id:'db', icon:'db', name:'Database', sub:'where state lives', latLabel:'0.1–10 ms', bar:18,
+      what:['The handler borrows a connection from a <b>pool</b> (reused warm connections, not one-per-request), runs a query, and returns it.','An <b>index</b> turns a full-table scan into a fast lookup. Transactions give ACID guarantees.'],
+      curtain:['ORMs hide the SQL — and the <b>N+1 query</b> problem (1 query becomes 1+N). The pool has a hard cap; exceed it and requests queue or fail.'],
+      fail:['<b>Pool exhausted</b> (a slow query holds connections) → everything stalls. Missing index → latency cliff as data grows. Deadlocks under contention.'],
+      kb:'foundations/12-databases-drivers-pools.md' }
+  ];
+
+  const LAT = [
+    { op:'L1 cache reference', t:'~1 ns', log:1 },
+    { op:'Branch mispredict', t:'~3 ns', log:1.5 },
+    { op:'L2 cache reference', t:'~4 ns', log:1.6 },
+    { op:'Mutex lock/unlock', t:'~17 ns', log:2.2 },
+    { op:'Main memory (RAM) reference', t:'~100 ns', log:3 },
+    { op:'Compress 1 KB (fast)', t:'~2 µs', log:4.3 },
+    { op:'Read 1 MB sequentially from RAM', t:'~3 µs', log:4.5 },
+    { op:'SSD random read', t:'~16 µs', log:5.2 },
+    { op:'Round trip within same datacenter', t:'~0.5 ms', log:6.7 },
+    { op:'Read 1 MB sequentially from SSD', t:'~1 ms', log:7 },
+    { op:'Disk (HDD) seek', t:'~10 ms', log:8 },
+    { op:'RTT California → Netherlands', t:'~150 ms', log:9.2 }
+  ];
+
+  // ---- render pipeline ----
+  const pipeline = document.getElementById('pipeline');
+  const detail = document.getElementById('detail');
+  let active = 0;
+
+  HOPS.forEach((h, i) => {
+    const el = document.createElement('button');
+    el.className = 'hop';
+    el.setAttribute('role', 'tab');
+    el.setAttribute('aria-label', h.name + ', hop ' + (i+1));
+    el.dataset.i = i;
+    el.innerHTML =
+      '<span class="num">'+(i+1)+'</span>' +
+      '<span class="glyph" aria-hidden="true">'+I[h.icon]+'</span>' +
+      '<span class="name">'+h.name+'</span>' +
+      '<span class="lat">'+h.latLabel+'</span>' +
+      '<span class="pkt" aria-hidden="true"></span>';
+    el.addEventListener('click', () => select(i));
+    pipeline.appendChild(el);
+  });
+
+  function renderDetail(i) {
+    const h = HOPS[i];
+    detail.innerHTML =
+      '<div class="d-head">' +
+        '<span class="d-glyph" aria-hidden="true">'+I[h.icon]+'</span>' +
+        '<div><h2>'+(i+1)+'. '+h.name+'</h2><div class="d-sub">'+h.sub+'</div></div>' +
+        '<span style="flex:1"></span>' +
+        '<span class="chip lat">latency '+h.latLabel+'</span>' +
+      '</div>' +
+      '<div class="d-body">' +
+        '<div class="d-what">'+h.what.map(p=>'<p>'+p+'</p>').join('')+
+          '<div class="kbref">Go deeper → <code>'+h.kb+'</code></div>' +
+        '</div>' +
+        '<div style="display:grid;gap:12px">' +
+          '<div class="card curtain"><h3>What the framework hides</h3><ul>'+h.curtain.map(x=>'<li>'+x+'</li>').join('')+'</ul></div>' +
+          '<div class="card fail"><h3>How it fails</h3><ul>'+h.fail.map(x=>'<li>'+x+'</li>').join('')+'</ul></div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function select(i) {
+    active = i;
+    [...pipeline.children].forEach((el, idx) => {
+      el.classList.toggle('active', idx === i);
+      el.setAttribute('aria-selected', idx === i ? 'true' : 'false');
+    });
+    renderDetail(i);
+    pipeline.children[i].scrollIntoView({ block:'nearest', inline:'center', behavior:'smooth' });
+  }
+
+  // ---- animation ----
+  let playing = false, timer = null;
+  const hint = document.getElementById('hint');
+  function clearLit(){ [...pipeline.children].forEach(el=>el.classList.remove('lit')); }
+
+  function play() {
+    if (playing) return;
+    playing = true; clearLit();
+    document.getElementById('play').textContent = 'Playing…';
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const stepMs = reduce ? 0 : 620;
+    let i = 0;
+    const advance = () => {
+      if (i > 0) pipeline.children[i-1].classList.remove('lit');
+      if (i >= HOPS.length) {
+        // response travels back
+        hint.textContent = '← Response travelling back the same chain to the browser.';
+        clearLit();
+        playing = false;
+        document.getElementById('play').textContent = '▶ Play again';
+        return;
+      }
+      pipeline.children[i].classList.add('lit');
+      select(i);
+      i++;
+      timer = setTimeout(advance, stepMs);
+    };
+    if (reduce) { select(HOPS.length-1); playing=false; document.getElementById('play').textContent='▶ Play again'; return; }
+    advance();
+  }
+
+  document.getElementById('play').addEventListener('click', () => { clearTimeout(timer); playing=false; play(); });
+  document.getElementById('step').addEventListener('click', () => { select((active+1) % HOPS.length); });
+  document.getElementById('reset').addEventListener('click', () => {
+    clearTimeout(timer); playing=false; clearLit();
+    document.getElementById('play').textContent='▶ Play the request';
+    hint.textContent='Tip: click a hop, or use ← → keys.';
+    select(0);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') { e.preventDefault(); select((active+1) % HOPS.length); }
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); select((active-1+HOPS.length) % HOPS.length); }
+  });
+
+  // ---- latency table ----
+  const tbody = document.querySelector('#latTable tbody');
+  const maxLog = Math.max(...LAT.map(r=>r.log));
+  LAT.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>'+r.op+'</td><td class="num">'+r.t+'</td>' +
+      '<td class="barcell"><div class="bar" style="width:'+((r.log/maxLog)*100)+'%"></div></td>';
+    tbody.appendChild(tr);
+  });
+
+  select(0);
+</script>

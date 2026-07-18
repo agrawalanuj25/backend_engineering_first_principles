@@ -76,9 +76,17 @@ server {
         proxy_pass http://localhost:3001;   # the Node server
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; # real client IP chain
+        proxy_set_header X-Forwarded-Proto $scheme;                  # tell app it was HTTPS
     }
 }
 ```
+
+> On modern nginx (≥ 1.25) enable HTTP/2 with a separate directive:
+> `listen 443 ssl;` then `http2 on;`. The old `listen 443 ssl http2;` form is
+> deprecated. The `X-Forwarded-For` header matters because, behind a proxy, your
+> app otherwise sees only the proxy's IP as the client — see
+> `network-qa/01-why-ip-address-changes.md`.
 
 The browser only ever sees Nginx on 443; the Node app stays on `localhost:3001`, shielded from the public internet.
 
@@ -105,15 +113,23 @@ The browser only ever sees Nginx on 443; the Node app stays on `localhost:3001`,
 const { Pool } = require('pg');
 const pool = new Pool({ max: 10 }); // reuse up to 10 connections
 
-app.get('/users', async (req, res) => {
-  const client = await pool.connect();      // borrow a warm connection
+// For a SINGLE query, let the pool check out and release for you — simpler and
+// impossible to leak. `pool.query` borrows a connection and returns it automatically.
+app.get('/users', async (req, res, next) => {
   try {
-    const result = await client.query('SELECT * FROM users');
+    const result = await pool.query('SELECT * FROM users');
     res.json(result.rows);
-  } finally {
-    client.release();                       // return it to the pool
+  } catch (err) {
+    next(err); // Express 4 does NOT auto-forward async rejections; without this the response hangs
   }
 });
+
+// Manual checkout (pool.connect + release) is only needed for a TRANSACTION,
+// where several queries must run on the SAME connection:
+//   const client = await pool.connect();
+//   try { await client.query('BEGIN'); ...; await client.query('COMMIT'); }
+//   catch (e) { await client.query('ROLLBACK'); throw e; }
+//   finally { client.release(); }   // release in finally, or you leak the connection
 ```
 
 Without the pool, thousands of requests/sec would each do a full TCP+auth handshake to Postgres and likely crash it.
@@ -146,6 +162,10 @@ const app = express();
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', 'https://frontend.demo.xyx');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // A POST with Content-Type: application/json triggers a *preflight* OPTIONS
+  // request. We must answer it (204, no body) or the real request never runs.
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
 
@@ -153,7 +173,10 @@ app.get('/data', (req, res) => res.json({ ok: true }));
 app.listen(3001);
 ```
 
-Key point: **CORS is enforced by the browser, not the network.** A backend calling another backend has no such restriction — another reason backend logic can't live in the browser.
+> In real projects, use the `cors` npm package instead of hand-rolling headers —
+> it handles preflight, methods, and credentials correctly.
+
+Key point: **CORS is enforced by the browser, not the network.** A backend calling another backend has no such restriction — another reason backend logic can't live in the browser. Note the two-step dance for non-simple requests: the browser sends a **preflight `OPTIONS`** asking "am I allowed?", and only sends the real request if the server's `Access-Control-Allow-*` headers say yes.
 
 </details>
 
@@ -170,11 +193,22 @@ Key point: **CORS is enforced by the browser, not the network.** A backend calli
 ```js
 const http = require('http');
 const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.writeHead(200, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*', // let the browser page read this response
+  });
   res.end(JSON.stringify({ message: 'processed on the server', users: [{ id: 1, name: 'Ada' }] }));
 });
 server.listen(3001, () => console.log('Backend on :3001'));
 ```
+
+> **Why the CORS header?** If you open the HTML file below from `file://` or a
+> different port, the `fetch` is *cross-origin*. Without
+> `Access-Control-Allow-Origin`, the browser makes the request but **blocks your
+> JS from reading the response**. The `*` header above fixes the demo. (If you
+> instead just point the browser bar directly at `http://localhost:3001`, that's
+> a top-level navigation, not a `fetch`, so CORS doesn't apply and you'd see the
+> raw JSON either way.)
 
 **(b) Frontend — runs **in the browser**:
 ```html

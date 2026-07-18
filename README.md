@@ -22,6 +22,8 @@ agent "trains" by reading those files.
 ```
 backend_engineering_first_principles/
 ├── README.md                 # This file
+├── ROADMAP.md                # Master learning plan (applied + systems-fundamentals tracks → HFT/core)
+├── CLAUDE.md                 # Project context for Claude Code
 ├── LICENSE                   # MIT
 ├── CONTRIBUTING.md           # How to extend the KB video-by-video
 │
@@ -51,6 +53,7 @@ anywhere:
 | Form | File | How to use |
 |------|------|------------|
 | **Portable system prompt** | `agents/backend-fp.system.md` | Copy into ChatGPT, Claude, or any LLM chat to get the persona + KB instructions. |
+| **Claude Code subagent** | `.claude/agents/backend-fp.md` | In Claude Code, type `@backend-fp <question>`. It reads `kb/`, `foundations/`, `notes/`, `network-qa/` on demand. (`CLAUDE.md` gives the whole session project context.) |
 | **opencode subagent** | `.opencode/agents/backend-fp.md` | In opencode, type `@backend-fp <question>`. It reads `kb/` on demand. |
 | **opencode skill** | `.opencode/skills/backend-fp/SKILL.md` | Auto-loads when you ask backend questions from first principles. |
 
